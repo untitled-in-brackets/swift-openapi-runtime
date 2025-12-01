@@ -41,7 +41,15 @@ let package = Package(
             dependencies: [
                 .product(name: "HTTPTypes", package: "swift-http-types")
             ],
-            swiftSettings: swiftSettings
+            cxxSettings: [
+                .define("_WASI_EMULATED_SIGNAL", .when(platforms: [.wasi])),
+                .define("_WASI_EMULATED_MMAN", .when(platforms: [.wasi])),
+            ],
+            swiftSettings: swiftSettings,
+            linkerSettings: [
+                .linkedLibrary("wasi-emulated-signal", .when(platforms: [.wasi])),
+                .linkedLibrary("wasi-emulated-mman", .when(platforms: [.wasi])),
+            ]
         ),
         .testTarget(
             name: "OpenAPIRuntimeTests",
