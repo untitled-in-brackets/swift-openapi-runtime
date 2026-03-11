@@ -11,9 +11,14 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //===----------------------------------------------------------------------===//
+
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 import XCTest
 import HTTPTypes
-import Foundation
 @_spi(Generated) @testable import OpenAPIRuntime
 
 struct MockHandler: Sendable {
@@ -93,6 +98,37 @@ final class Test_UniversalServer: Test_Runtime {
             XCTAssertEqual(serverError.operationID, "op")
             XCTAssertEqual(serverError.causeDescription, "Unknown")
             XCTAssertEqual(serverError.underlyingError as? TestError, TestError())
+            XCTAssertEqual(serverError.request, .init(soar_path: "/", method: .post))
+            XCTAssertEqual(serverError.requestBody, MockHandler.requestBody)
+            XCTAssertEqual(serverError.requestMetadata, .init())
+            XCTAssertNil(serverError.operationInput)
+            XCTAssertNil(serverError.operationOutput)
+        }
+    }
+
+    func testErrorPropagation_deserializerWithDecodingError() async throws {
+        let decodingError = DecodingError.dataCorrupted(
+            .init(codingPath: [], debugDescription: "Invalid request body.")
+        )
+        do {
+            let server = UniversalServer(handler: MockHandler())
+            _ = try await server.handle(
+                request: .init(soar_path: "/", method: .post),
+                requestBody: MockHandler.requestBody,
+                metadata: .init(),
+                forOperation: "op",
+                using: { MockHandler.greet($0) },
+                deserializer: { request, body, metadata in throw decodingError },
+                serializer: { output, _ in fatalError() }
+            )
+        } catch {
+            let serverError = try XCTUnwrap(error as? ServerError)
+            XCTAssertEqual(serverError.operationID, "op")
+            XCTAssert(serverError.causeDescription.contains("An error occurred while attempting to parse the request"))
+            XCTAssert(serverError.underlyingError is DecodingError)
+            XCTAssertEqual(serverError.httpStatus, .badRequest)
+            XCTAssertEqual(serverError.httpHeaderFields, [:])
+            XCTAssertNil(serverError.httpBody)
             XCTAssertEqual(serverError.request, .init(soar_path: "/", method: .post))
             XCTAssertEqual(serverError.requestBody, MockHandler.requestBody)
             XCTAssertEqual(serverError.requestMetadata, .init())

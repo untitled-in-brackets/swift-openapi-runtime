@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-import HTTPTypes
+public import HTTPTypes
 
 /// An opt-in error handling middleware that converts an error to an HTTP response.
 ///
@@ -52,16 +52,15 @@ public struct ErrorHandlingMiddleware: ServerMiddleware {
         body: OpenAPIRuntime.HTTPBody?,
         metadata: OpenAPIRuntime.ServerRequestMetadata,
         operationID: String,
-        next: @Sendable (HTTPTypes.HTTPRequest, OpenAPIRuntime.HTTPBody?, OpenAPIRuntime.ServerRequestMetadata)
+        next:
+            @Sendable (HTTPTypes.HTTPRequest, OpenAPIRuntime.HTTPBody?, OpenAPIRuntime.ServerRequestMetadata)
             async throws -> (HTTPTypes.HTTPResponse, OpenAPIRuntime.HTTPBody?)
     ) async throws -> (HTTPTypes.HTTPResponse, OpenAPIRuntime.HTTPBody?) {
         do { return try await next(request, body, metadata) } catch {
-            if let serverError = error as? ServerError,
-                let appError = serverError.underlyingError as? (any HTTPResponseConvertible)
-            {
+            if let serverError = error as? ServerError {
                 return (
-                    HTTPResponse(status: appError.httpStatus, headerFields: appError.httpHeaderFields),
-                    appError.httpBody
+                    HTTPResponse(status: serverError.httpStatus, headerFields: serverError.httpHeaderFields),
+                    serverError.httpBody
                 )
             } else {
                 return (HTTPResponse(status: .internalServerError), nil)

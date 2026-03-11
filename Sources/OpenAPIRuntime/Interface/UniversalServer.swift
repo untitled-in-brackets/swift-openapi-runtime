@@ -12,13 +12,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-import HTTPTypes
-#if canImport(Darwin)
-import struct Foundation.URL
+#if canImport(FoundationEssentials)
+public import FoundationEssentials
 #else
-@preconcurrency import struct Foundation.URL
+public import Foundation
 #endif
-import struct Foundation.URLComponents
+public import HTTPTypes
 
 /// OpenAPI document-agnostic HTTP server used by OpenAPI document-specific,
 /// generated servers to perform request deserialization, middleware and handler
@@ -91,8 +90,8 @@ import struct Foundation.URLComponents
         metadata: ServerRequestMetadata,
         forOperation operationID: String,
         using handlerMethod: @Sendable @escaping (APIHandler) -> ((OperationInput) async throws -> OperationOutput),
-        deserializer: @Sendable @escaping (HTTPRequest, HTTPBody?, ServerRequestMetadata) async throws ->
-            OperationInput,
+        deserializer:
+            @Sendable @escaping (HTTPRequest, HTTPBody?, ServerRequestMetadata) async throws -> OperationInput,
         serializer: @Sendable @escaping (OperationOutput, HTTPRequest) throws -> (HTTPResponse, HTTPBody?)
     ) async throws -> (HTTPResponse, HTTPBody?) where OperationInput: Sendable, OperationOutput: Sendable {
         @Sendable func wrappingErrors<R>(work: () async throws -> R, mapError: (any Error) -> any Error) async throws
@@ -119,6 +118,23 @@ import struct Foundation.URLComponents
                 causeDescription = "Unknown"
                 underlyingError = error
             }
+
+            let httpStatus: HTTPResponse.Status
+            let httpHeaderFields: HTTPTypes.HTTPFields
+            let httpBody: OpenAPIRuntime.HTTPBody?
+            if let httpConvertibleError = underlyingError as? (any HTTPResponseConvertible) {
+                httpStatus = httpConvertibleError.httpStatus
+                httpHeaderFields = httpConvertibleError.httpHeaderFields
+                httpBody = httpConvertibleError.httpBody
+            } else if let httpConvertibleError = error as? (any HTTPResponseConvertible) {
+                httpStatus = httpConvertibleError.httpStatus
+                httpHeaderFields = httpConvertibleError.httpHeaderFields
+                httpBody = httpConvertibleError.httpBody
+            } else {
+                httpStatus = .internalServerError
+                httpHeaderFields = [:]
+                httpBody = nil
+            }
             return ServerError(
                 operationID: operationID,
                 request: request,
@@ -127,13 +143,18 @@ import struct Foundation.URLComponents
                 operationInput: input,
                 operationOutput: output,
                 causeDescription: causeDescription,
-                underlyingError: underlyingError
+                underlyingError: underlyingError,
+                httpStatus: httpStatus,
+                httpHeaderFields: httpHeaderFields,
+                httpBody: httpBody
             )
         }
         var next: @Sendable (HTTPRequest, HTTPBody?, ServerRequestMetadata) async throws -> (HTTPResponse, HTTPBody?) =
             { _request, _requestBody, _metadata in
                 let input: OperationInput = try await wrappingErrors {
-                    try await deserializer(_request, _requestBody, _metadata)
+                    do { return try await deserializer(_request, _requestBody, _metadata) } catch let decodingError
+                        as DecodingError
+                    { throw RuntimeError.failedToParseRequest(decodingError) }
                 } mapError: { error in
                     makeError(error: error)
                 }

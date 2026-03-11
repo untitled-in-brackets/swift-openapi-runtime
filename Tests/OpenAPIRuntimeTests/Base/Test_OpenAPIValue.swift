@@ -11,6 +11,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 //===----------------------------------------------------------------------===//
+
 import XCTest
 import Foundation
 #if canImport(CoreFoundation)
@@ -26,7 +27,7 @@ final class Test_OpenAPIValue: Test_Runtime {
         _ = OpenAPIValueContainer(1)
         _ = OpenAPIValueContainer(4.5)
 
-        #if canImport(Foundation)
+        #if FullFoundation || canImport(Darwin)
         XCTAssertEqual(try OpenAPIValueContainer(unvalidatedValue: NSNull()).value as? NSNull, NSNull())
         #endif
 
@@ -68,7 +69,7 @@ final class Test_OpenAPIValue: Test_Runtime {
             """#
         try _testPrettyEncoded(container, expectedJSON: expectedString)
     }
-    #if canImport(Foundation)
+    #if FullFoundation || canImport(Darwin)
     func testEncodingNSNull() throws {
         let value = NSNull()
         let container = try OpenAPIValueContainer(unvalidatedValue: value)
@@ -454,7 +455,7 @@ struct MyAnyOf2<Value1: Codable & Hashable & Sendable, Value2: Codable & Hashabl
         self.value1 = value1
         self.value2 = value2
     }
-    public init(from decoder: any Decoder) throws {
+    init(from decoder: any Decoder) throws {
         var errors: [any Error] = []
         do { self.value1 = try .init(from: decoder) } catch { errors.append(error) }
         do { self.value2 = try .init(from: decoder) } catch { errors.append(error) }
@@ -465,7 +466,7 @@ struct MyAnyOf2<Value1: Codable & Hashable & Sendable, Value2: Codable & Hashabl
             errors: errors
         )
     }
-    public func encode(to encoder: any Encoder) throws {
+    func encode(to encoder: any Encoder) throws {
         try self.value1?.encode(to: encoder)
         try self.value2?.encode(to: encoder)
     }
